@@ -1,0 +1,29 @@
+section,metric,value
+platform,platform,oracle
+platform,version,19.0.0.0.0
+platform,banner,Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+cdc,archivelog_mode,ARCHIVELOG
+cdc,supplemental_logging,NO
+size,total_size_gb,14336.2
+size,largest_table_gb,980.4
+inventory,table_count,4120
+inventory,view_count,1880
+inventory,mview_count,74
+inventory,package_count,610
+inventory,proc_count,210
+inventory,function_count,320
+inventory,trigger_count,410
+inventory,sequence_count,800
+inventory,dblink_count,12
+code,code_lines,1288000
+code,connect_by_objects,41
+code,wrapped_objects,6
+types,number_noprecision_columns,3120
+types,lob_columns,410
+workload,user_count,910
+workload,sessions_max,620
+workload,daily_user_calls,8800000
+security,vpd_policies,14
+client_app,pmdtm,40
+client_app,JDBC Thin Client,120
+error,redaction_policies,ORA-00942: table or view does not exist

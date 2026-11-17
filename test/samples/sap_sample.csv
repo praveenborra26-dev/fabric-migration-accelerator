@@ -1,0 +1,13 @@
+SEC,METRIC_NAME,METRIC_VALUE
+platform,platform,sap_erp
+platform,db,hana
+size,total_size_gb,7340.5
+sap,custom_tabl,1820
+sap,custom_ddls,140
+sap,custom_prog,5400
+sap,dialog_users,8120
+sap,active_datasources,2210
+table_top,ACDOCA,1220.4
+table_top,MATDOC,610.2
+table_top,VBAP,140.0
+table_top,PA2001,40.0

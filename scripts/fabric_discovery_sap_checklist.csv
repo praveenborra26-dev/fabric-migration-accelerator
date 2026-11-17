@@ -1,0 +1,20 @@
+section,metric,value,how_to_collect
+platform,platform,sap_erp,Keep sap_erp for ECC or S/4HANA. Use sap_bw for a BW or BW/4HANA system.
+platform,product,,"ECC 6.0 EHPx / S/4HANA 20xx / BW 7.5 / BW/4HANA 20xx (System > Status, or SPAM)"
+platform,db,,"hana, oracle, db2, mssql, maxdb or ase (System > Status > Database)"
+size,total_size_gb,,DB02 (or DBACOCKPIT) > Space > Used database size in GB
+sap,tables_in_scope,,Number of SAP tables you expect to extract for analytics
+sap,active_datasources,,RSA6 > count of active DataSources (or SE16N on ROOSOURCE with OBJVERS = A)
+sap,custom_tabl,,SE16N on TADIR: PGMID = R3TR / OBJECT = TABL / OBJ_NAME = Z* and Y* (add both counts)
+sap,custom_ddls,,SE16N on TADIR: OBJECT = DDLS / OBJ_NAME = Z* and Y* (custom CDS views)
+sap,custom_prog,,SE16N on TADIR: OBJECT = PROG / OBJ_NAME = Z* and Y*
+sap,dialog_users,,SUIM > Users by logon date (dialog users / type A / not locked)
+sap,bg_jobs_30d,,SM37 > all jobs in the last 30 days (number of jobs)
+sap,odp_third_party_subscribers,,"ODQMON > subscriptions: number of non-SAP subscribers (Note 3255746 exposure)"
+sap,slt_in_use,,LTRC on the SLT system: yes or no
+sap,modules,,"Modules in scope, separated by semicolons: FI;CO;SD;MM;PP;PM;QM;PS;HCM;WM;EWM;TM"
+bw,infoproviders,,RSA1 > InfoProvider count (ADSOs + DSOs + InfoCubes + CompositeProviders)
+bw,queries,,RSRT or SE16N on RSZCOMPDIR (OBJVERS = A and DEFTP = REP)
+bw,process_chains,,RSPC > number of process chains
+bw,transformations,,SE16N on RSTRAN (OBJVERS = A)
+workload,daily_queries,,ST03N > workload overview (BW: query navigation steps per day)

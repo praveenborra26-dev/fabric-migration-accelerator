@@ -1,0 +1,37 @@
+section	metric	value
+platform	platform	mssql
+platform	version	15.0.4365.2
+platform	edition	Enterprise Edition (64-bit)
+platform	cpu_count	32
+size	used_size_gb	2280.55
+size	largest_table_gb	412.20
+inventory	table_count	1450.00
+inventory	view_count	512.00
+inventory	proc_count	802.00
+inventory	function_count	120.00
+inventory	trigger_count	14.00
+inventory	sequence_count	6.00
+inventory	linked_server_count	3
+inventory	database_count	9
+code	code_lines	188220.00
+code	cursor_objects	61.00
+code	dynamic_sql_objects	140.00
+code	xml_objects	12.00
+code	cross_db_objects	77.00
+types	col_nvarchar	8120.00
+types	col_datetime	4410.00
+types	col_money	210.00
+types	unsupported_type_columns	12740
+workload	login_count	412
+workload	daily_batches	1843000
+workload	user_sessions_now	88
+etl	agent_jobs	140
+etl	ssisdb_packages	388
+bi	ssrs_reports	940
+bi	ssrs_reports_used_recent	512
+cdc	cdc_enabled_dbs	0
+security	rls_policy_count	4.00
+client_app	Microsoft SQL Server Management Studio	12
+client_app	SSIS-Package-Host	20
+client_app	Tableau Server	9
+table_top	SalesDW.dbo.FactSales	412.20|2102330441

@@ -1,0 +1,167 @@
+.LOGON tdpid/username,password
+.SET WIDTH 2000
+.SET TITLEDASHES OFF
+
+/* =============================================================================
+   Fabric Migration Assessment Accelerator
+   Discovery script : Teradata Database 15.10+ / Teradata Vantage (on-prem, IntelliFlex, VantageCloud)
+   Script version   : 2026.11
+   -----------------------------------------------------------------------------
+   What it does : Reads DBC dictionary views and the DBQL query log only.
+                  Creates two VOLATILE tables in your own session (gone at logoff).
+                  No business data is read.
+   Permissions  : SELECT on DBC.TablesV, ColumnsV, DatabasesV, DiskSpaceV,
+                  TableSizeV, IndexConstraintsV, DBCInfoV and DBC.QryLogV (workload).
+   How to run   : 1) Edit the .LOGON line above.  2) bteq < fabric_discovery_teradata.bteq
+                  Teradata Studio / SQL Assistant: skip the dot-commands, run the
+                  statements, then export the final result grid as CSV.
+   Output       : fabric_discovery_teradata.csv
+   Note         : If DBQL history is archived with PDCR, replace DBC.QryLogV with
+                  PDCRINFO.DBQLogTbl_Hst in the workload section.
+   ============================================================================= */
+CREATE VOLATILE TABLE fab_sysdb (dbname VARCHAR(128) CHARACTER SET UNICODE) ON COMMIT PRESERVE ROWS;
+
+INSERT INTO fab_sysdb
+SELECT DatabaseName FROM DBC.DatabasesV
+WHERE DatabaseName IN ('DBC','SYSLIB','SYSUDTLIB','SYSSPATIAL','SYSBAR','SYSJDBC','SYSXML','TD_SYSXML','TD_SYSFNLIB',
+                       'TD_SYSGPL','TD_SERVER_DB','TDSTATS','TDQCD','TDMAPS','TD_ANALYTICS_DB','TDWM','LockLogShredder',
+                       'SystemFe','Sys_Calendar','dbcmngr','SQLJ','External_AP','Crashdumps','PUBLIC','Default','All',
+                       'EXTUSER','SysAdmin','TDPUSER','console','SYSUIF','TD_METRIC_SVC','TD_SYSINTERNAL','viewpoint',
+                       'DATAMOVER','TD_DATASHARING_REPO','TD_OFSMETA','TDBCMgmt')
+   OR DatabaseName LIKE 'PDCR%' OR DatabaseName LIKE 'TDaaS%' OR DatabaseName LIKE 'TD_SYS%';
+
+CREATE VOLATILE TABLE fab_disc (section VARCHAR(40), metric VARCHAR(256), val VARCHAR(1000)) ON COMMIT PRESERVE ROWS;
+
+/* ---- Platform ---------------------------------------------------------------- */
+INSERT INTO fab_disc VALUES ('platform', 'platform', 'teradata');
+INSERT INTO fab_disc VALUES ('platform', 'script_version', '2026.11');
+INSERT INTO fab_disc SELECT 'platform', 'version', TRIM(InfoData) FROM DBC.DBCInfoV WHERE InfoKey = 'VERSION';
+INSERT INTO fab_disc SELECT 'platform', 'release', TRIM(InfoData) FROM DBC.DBCInfoV WHERE InfoKey = 'RELEASE';
+INSERT INTO fab_disc SELECT 'platform', 'amp_count', TRIM(CAST(HASHAMP() + 1 AS VARCHAR(20)));
+
+/* ---- Size ---------------------------------------------------------------------- */
+INSERT INTO fab_disc
+SELECT 'size', 'total_size_gb', TRIM(CAST(CAST(SUM(CAST(CurrentPerm AS FLOAT)) / 1073741824 AS DECIMAL(18,2)) AS VARCHAR(30)))
+FROM DBC.DiskSpaceV WHERE DatabaseName NOT IN (SELECT dbname FROM fab_sysdb);
+
+INSERT INTO fab_disc
+SELECT 'size', 'max_perm_gb', TRIM(CAST(CAST(SUM(CAST(MaxPerm AS FLOAT)) / 1073741824 AS DECIMAL(18,2)) AS VARCHAR(30)))
+FROM DBC.DiskSpaceV WHERE DatabaseName NOT IN (SELECT dbname FROM fab_sysdb);
+
+INSERT INTO fab_disc
+SELECT 'size', 'largest_table_gb', TRIM(CAST(CAST(MAX(s) / 1073741824 AS DECIMAL(18,2)) AS VARCHAR(30)))
+FROM (SELECT DatabaseName, TableName, SUM(CAST(CurrentPerm AS FLOAT)) AS s
+      FROM DBC.TableSizeV WHERE DatabaseName NOT IN (SELECT dbname FROM fab_sysdb)
+      GROUP BY 1, 2) t;
+
+/* ---- Inventory ------------------------------------------------------------------- */
+INSERT INTO fab_disc
+SELECT 'inventory',
+       CASE TableKind
+         WHEN 'T' THEN 'table_count'        WHEN 'O' THEN 'nopi_table_count'
+         WHEN 'V' THEN 'view_count'         WHEN 'P' THEN 'proc_count'
+         WHEN 'E' THEN 'external_proc_count' WHEN 'M' THEN 'macro_count'
+         WHEN 'F' THEN 'function_count'     WHEN 'R' THEN 'table_function_count'
+         WHEN 'A' THEN 'aggregate_function_count' WHEN 'G' THEN 'trigger_count'
+         WHEN 'I' THEN 'join_index_count'   WHEN 'N' THEN 'hash_index_count'
+         WHEN 'Q' THEN 'queue_table_count'  WHEN 'U' THEN 'udt_count'
+         ELSE 'kind_' || TRIM(TableKind) END,
+       TRIM(CAST(COUNT(*) AS VARCHAR(20)))
+FROM DBC.TablesV
+WHERE DatabaseName NOT IN (SELECT dbname FROM fab_sysdb)
+GROUP BY TableKind;
+
+INSERT INTO fab_disc SELECT 'inventory', 'database_count', TRIM(CAST(COUNT(*) AS VARCHAR(20)))
+FROM DBC.DatabasesV WHERE DBKind = 'D' AND DatabaseName NOT IN (SELECT dbname FROM fab_sysdb);
+
+INSERT INTO fab_disc SELECT 'workload', 'user_count', TRIM(CAST(COUNT(*) AS VARCHAR(20)))
+FROM DBC.DatabasesV WHERE DBKind = 'U' AND DatabaseName NOT IN (SELECT dbname FROM fab_sysdb);
+
+INSERT INTO fab_disc SELECT 'inventory', 'ppi_table_count', TRIM(CAST(COUNT(DISTINCT TRIM(DatabaseName) || '.' || TRIM(TableName)) AS VARCHAR(20)))
+FROM DBC.IndexConstraintsV WHERE ConstraintType = 'Q' AND DatabaseName NOT IN (SELECT dbname FROM fab_sysdb);
+
+/* ---- Code volume and feature usage (RequestText holds up to 12,500 chars per object) ---- */
+INSERT INTO fab_disc SELECT 'code', 'proc_macro_chars', TRIM(CAST(SUM(CAST(CHARACTER_LENGTH(RequestText) AS BIGINT)) AS VARCHAR(30)))
+FROM DBC.TablesV WHERE TableKind IN ('P','M','G','F') AND DatabaseName NOT IN (SELECT dbname FROM fab_sysdb);
+
+INSERT INTO fab_disc SELECT 'code', 'view_chars', TRIM(CAST(SUM(CAST(CHARACTER_LENGTH(RequestText) AS BIGINT)) AS VARCHAR(30)))
+FROM DBC.TablesV WHERE TableKind = 'V' AND DatabaseName NOT IN (SELECT dbname FROM fab_sysdb);
+
+INSERT INTO fab_disc SELECT 'code', 'qualify_objects', TRIM(CAST(COUNT(*) AS VARCHAR(20)))
+FROM DBC.TablesV WHERE TableKind IN ('V','M','P') AND UPPER(RequestText) LIKE '%QUALIFY%' AND DatabaseName NOT IN (SELECT dbname FROM fab_sysdb);
+
+INSERT INTO fab_disc SELECT 'code', 'recursive_objects', TRIM(CAST(COUNT(*) AS VARCHAR(20)))
+FROM DBC.TablesV WHERE TableKind IN ('V','M','P') AND UPPER(RequestText) LIKE '%RECURSIVE%' AND DatabaseName NOT IN (SELECT dbname FROM fab_sysdb);
+
+INSERT INTO fab_disc SELECT 'code', 'volatile_table_objects', TRIM(CAST(COUNT(*) AS VARCHAR(20)))
+FROM DBC.TablesV WHERE TableKind IN ('M','P') AND UPPER(RequestText) LIKE '%VOLATILE TABLE%' AND DatabaseName NOT IN (SELECT dbname FROM fab_sysdb);
+
+INSERT INTO fab_disc SELECT 'code', 'cursor_objects', TRIM(CAST(COUNT(*) AS VARCHAR(20)))
+FROM DBC.TablesV WHERE TableKind = 'P' AND UPPER(RequestText) LIKE '%CURSOR%' AND DatabaseName NOT IN (SELECT dbname FROM fab_sysdb);
+
+INSERT INTO fab_disc SELECT 'code', 'dynamic_sql_objects', TRIM(CAST(COUNT(*) AS VARCHAR(20)))
+FROM DBC.TablesV WHERE TableKind = 'P' AND (UPPER(RequestText) LIKE '%SYSEXECSQL%' OR UPPER(RequestText) LIKE '%EXECUTE IMMEDIATE%')
+  AND DatabaseName NOT IN (SELECT dbname FROM fab_sysdb);
+
+INSERT INTO fab_disc SELECT 'code', 'set_table_explicit', TRIM(CAST(COUNT(*) AS VARCHAR(20)))
+FROM DBC.TablesV WHERE TableKind = 'T' AND UPPER(RequestText) LIKE '%CREATE SET TABLE%' AND DatabaseName NOT IN (SELECT dbname FROM fab_sysdb);
+
+/* ---- Column data types --------------------------------------------------------------- */
+INSERT INTO fab_disc
+SELECT 'types',
+       CASE
+         WHEN c.ColumnType IN ('PD','PS','PT','PZ','PM') THEN 'period_columns'
+         WHEN c.ColumnType = 'JN' THEN 'json_columns'
+         WHEN c.ColumnType = 'XM' THEN 'xml_columns'
+         WHEN c.ColumnType IN ('BO','CO') THEN 'lob_columns'
+         WHEN c.ColumnType = 'UT' AND UPPER(c.ColumnUDTName) LIKE '%ST_GEOMETRY%' THEN 'spatial_columns'
+         WHEN c.ColumnType = 'UT' THEN 'udt_columns'
+         WHEN c.ColumnType IN ('A1','AN') THEN 'array_columns'
+         WHEN c.ColumnType IN ('CF','CV') AND c.UpperCaseFlag = 'N' THEN 'not_casespecific_columns'
+         WHEN c.ColumnType IN ('DY','DH','DM','DS','HR','HM','HS','MI','MS','MO','SC','YR','YM') THEN 'interval_columns'
+         ELSE 'other_columns' END,
+       TRIM(CAST(COUNT(*) AS VARCHAR(20)))
+FROM DBC.ColumnsV c
+INNER JOIN DBC.TablesV t ON t.DatabaseName = c.DatabaseName AND t.TableName = c.TableName AND t.TableKind IN ('T','O')
+WHERE c.DatabaseName NOT IN (SELECT dbname FROM fab_sysdb)
+GROUP BY 2;
+
+/* ---- Workload from DBQL (last 30 days) ----------------------------------------------- */
+INSERT INTO fab_disc SELECT 'workload', 'queries_30d', TRIM(CAST(COUNT(*) AS VARCHAR(20)))
+FROM DBC.QryLogV WHERE StartTime > CURRENT_TIMESTAMP - INTERVAL '30' DAY;
+
+INSERT INTO fab_disc SELECT 'workload', 'dbql_days', TRIM(CAST(COUNT(DISTINCT CAST(StartTime AS DATE)) AS VARCHAR(20)))
+FROM DBC.QryLogV WHERE StartTime > CURRENT_TIMESTAMP - INTERVAL '30' DAY;
+
+INSERT INTO fab_disc SELECT 'workload', 'active_users_30d', TRIM(CAST(COUNT(DISTINCT UserName) AS VARCHAR(20)))
+FROM DBC.QryLogV WHERE StartTime > CURRENT_TIMESTAMP - INTERVAL '30' DAY;
+
+INSERT INTO fab_disc SELECT 'workload', 'peak_hour_queries', TRIM(CAST(MAX(cnt) AS VARCHAR(20)))
+FROM (SELECT CAST(StartTime AS DATE) AS d, EXTRACT(HOUR FROM StartTime) AS h, COUNT(*) AS cnt
+      FROM DBC.QryLogV WHERE StartTime > CURRENT_TIMESTAMP - INTERVAL '30' DAY GROUP BY 1, 2) t;
+
+INSERT INTO fab_disc SELECT 'workload', 'cpu_seconds_30d', TRIM(CAST(CAST(SUM(AMPCPUTime) AS DECIMAL(18,0)) AS VARCHAR(30)))
+FROM DBC.QryLogV WHERE StartTime > CURRENT_TIMESTAMP - INTERVAL '30' DAY;
+
+/* Client tools by query count (BTEQ, TPT, Informatica, Tableau, MicroStrategy ...) */
+INSERT INTO fab_disc
+SELECT 'client_app', TRIM(COALESCE(AppID, '(unknown)')), TRIM(CAST(COUNT(*) AS VARCHAR(20)))
+FROM DBC.QryLogV WHERE StartTime > CURRENT_TIMESTAMP - INTERVAL '30' DAY
+GROUP BY AppID
+QUALIFY ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) <= 30;
+
+/* ---- Largest tables (wave planning). Delete this block to omit table names. ---------- */
+INSERT INTO fab_disc
+SELECT 'table_top', TRIM(DatabaseName) || '.' || TRIM(TableName),
+       TRIM(CAST(CAST(SUM(CAST(CurrentPerm AS FLOAT)) / 1073741824 AS DECIMAL(18,2)) AS VARCHAR(30)))
+FROM DBC.TableSizeV WHERE DatabaseName NOT IN (SELECT dbname FROM fab_sysdb)
+GROUP BY DatabaseName, TableName
+QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(CAST(CurrentPerm AS FLOAT)) DESC) <= 25;
+
+/* ---- Export -------------------------------------------------------------------------- */
+.EXPORT REPORT FILE = fabric_discovery_teradata.csv
+SELECT TRIM(section) || ',' || TRIM(metric) || ',' || TRIM(val) (TITLE 'section,metric,value')
+FROM fab_disc ORDER BY section, metric;
+.EXPORT RESET
+.LOGOFF
+.QUIT
