@@ -51,7 +51,7 @@
     const legend = ['user', 'disc', 'ai', 'derived', 'default', 'val'].map((s) => APP.srcChip(s)).join(' ');
     const saved = APP.caps.db && APP.caps.uid;
     return '<div class="page-h"><div><div class="eyebrow">Microsoft Fabric migration</div><h1>Assessment accelerator</h1>' +
-      '<p>Assess a move to Microsoft Fabric from SQL Server, Oracle, Teradata, IBM Db2 and SAP. Answer what you know and mark the rest <i>Not sure</i>. Then run the read-only discovery scripts, and the accelerator completes the assessment. A person reviews the 20–30% that needs judgement and signs it off.</p></div></div>' +
+      '<p>Assess a move to Microsoft Fabric from any analytics platform: SQL Server, Oracle, Teradata, Db2, SAP, Snowflake, Databricks, Redshift, BigQuery, PostgreSQL, MySQL, Hadoop and more. Answer what you know and mark the rest <i>Not sure</i>. Then run the read-only discovery scripts, and the accelerator completes the assessment. A person reviews the 20–30% that needs judgement and signs it off.</p></div></div>' +
       '<div class="grid2" style="grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)">' +
       '<div class="card"><div class="card-h"><div><h3>' + esc(APP.S.name || 'Untitled assessment') + '</h3><p class="sub">' + APP.S.systems.length + ' source ' + H.plural(APP.S.systems.length, 'system') + ' · updated ' + H.date(APP.S.updated) + '</p></div>' + APP.ring(c.agentic, Math.max(0, c.validated), 76) + '</div>' +
       '<div class="grid3" style="gap:10px">' +
@@ -100,8 +100,11 @@
 
   /* ---------- Source systems ---------- */
   const PLAT_GROUPS = [
-    ['Microsoft', ['mssql', 'synapse']], ['Oracle', ['oracle']], ['Teradata', ['teradata']], ['IBM', ['db2luw', 'db2zos', 'db2i', 'netezza']],
-    ['SAP', ['sap_ecc', 'sap_s4', 'sap_bw', 'sap_bw4', 'sap_hana']], ['Other', ['other']]
+    ['Microsoft', ['mssql', 'azure_sql', 'synapse']], ['Cloud data platforms', ['snowflake', 'databricks', 'redshift', 'bigquery']],
+    ['Oracle', ['oracle']], ['Teradata', ['teradata']], ['IBM', ['db2luw', 'db2zos', 'db2i', 'netezza']],
+    ['SAP', ['sap_ecc', 'sap_s4', 'sap_bw', 'sap_bw4', 'sap_hana', 'sap_ase', 'sap_iq']],
+    ['Open source', ['postgres', 'mysql', 'greenplum', 'clickhouse']], ['Analytic databases', ['vertica', 'exasol']],
+    ['Data lakes', ['hive']], ['Anything else', ['other']]
   ];
   const SEC_TITLES = { sys: 'Profile & scope', inventory: 'Inventory & size', code: 'Code & proprietary features', workload: 'Workload', etl: 'Integration', bi: 'Consumption' };
 

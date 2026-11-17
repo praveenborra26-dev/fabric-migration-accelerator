@@ -1,0 +1,99 @@
+-- =============================================================================
+-- Fabric Migration Assessment Accelerator
+-- Discovery script : Snowflake (any edition, any cloud)
+-- Script version   : 2026.11
+-- -----------------------------------------------------------------------------
+-- What it does : Reads SNOWFLAKE.ACCOUNT_USAGE views only (catalog, storage,
+--                query and login history). No business data is read.
+--                Creates one TEMPORARY table that disappears with the session.
+-- Permissions  : A role with IMPORTED PRIVILEGES on the SNOWFLAKE database
+--                (for example ACCOUNTADMIN, or a role granted
+--                SNOWFLAKE.OBJECT_VIEWER + SNOWFLAKE.GOVERNANCE_VIEWER +
+--                SNOWFLAKE.USAGE_VIEWER) and a running warehouse.
+-- How to run   : Paste into a Snowsight worksheet (or SnowSQL) and run all.
+--                ACCOUNT_USAGE views lag by up to 2-3 hours.
+-- Output       : One result grid (section, metric, value). Download it as CSV
+--                and import it in the accelerator: Automate -> Discovery.
+-- Errors       : A statement that fails (older account, missing privilege)
+--                becomes an 'error' row; the rest still runs.
+-- =============================================================================
+EXECUTE IMMEDIATE $$
+DECLARE
+  stmts ARRAY;
+  n INTEGER;
+  q VARCHAR;
+  err VARCHAR;
+  res RESULTSET;
+BEGIN
+  CREATE OR REPLACE TEMPORARY TABLE fab_disc (section VARCHAR, metric VARCHAR, value VARCHAR);
+  INSERT INTO fab_disc VALUES ('platform', 'platform', 'snowflake'), ('platform', 'script_version', '2026.11');
+  stmts := ARRAY_CONSTRUCT(
+    'SELECT ''platform'', ''version'', CURRENT_VERSION()',
+    'SELECT ''platform'', ''region'', CURRENT_REGION()',
+    -- size
+    'SELECT ''size'', ''total_size_gb'', TO_VARCHAR(ROUND(SUM(ACTIVE_BYTES) / POWER(1024, 3), 2)) FROM SNOWFLAKE.ACCOUNT_USAGE.TABLE_STORAGE_METRICS WHERE DELETED = FALSE AND TABLE_CATALOG <> ''SNOWFLAKE''',
+    'SELECT ''size'', ''time_travel_failsafe_gb'', TO_VARCHAR(ROUND(SUM(TIME_TRAVEL_BYTES + FAILSAFE_BYTES) / POWER(1024, 3), 2)) FROM SNOWFLAKE.ACCOUNT_USAGE.TABLE_STORAGE_METRICS WHERE DELETED = FALSE',
+    'SELECT ''size'', ''largest_table_gb'', TO_VARCHAR(ROUND(MAX(ACTIVE_BYTES) / POWER(1024, 3), 2)) FROM SNOWFLAKE.ACCOUNT_USAGE.TABLE_STORAGE_METRICS WHERE DELETED = FALSE',
+    -- inventory
+    'SELECT ''inventory'', ''database_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.DATABASES WHERE DELETED IS NULL AND DATABASE_NAME <> ''SNOWFLAKE''',
+    'SELECT ''inventory'', ''schema_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.SCHEMATA WHERE DELETED IS NULL AND SCHEMA_NAME <> ''INFORMATION_SCHEMA''',
+    'SELECT ''inventory'', ''table_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.TABLES WHERE DELETED IS NULL AND TABLE_TYPE = ''BASE TABLE'' AND TABLE_CATALOG <> ''SNOWFLAKE''',
+    'SELECT ''inventory'', ''view_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.VIEWS WHERE DELETED IS NULL AND TABLE_SCHEMA <> ''INFORMATION_SCHEMA'' AND TABLE_CATALOG <> ''SNOWFLAKE''',
+    'SELECT ''inventory'', ''secure_view_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.VIEWS WHERE DELETED IS NULL AND IS_SECURE = ''YES''',
+    'SELECT ''inventory'', ''mview_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.TABLES WHERE DELETED IS NULL AND TABLE_TYPE = ''MATERIALIZED VIEW''',
+    'SELECT ''inventory'', ''external_table_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.TABLES WHERE DELETED IS NULL AND TABLE_TYPE = ''EXTERNAL TABLE''',
+    'SELECT ''inventory'', ''transient_table_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.TABLES WHERE DELETED IS NULL AND IS_TRANSIENT = ''YES''',
+    'SELECT ''inventory'', ''dynamic_table_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.TABLES WHERE DELETED IS NULL AND IS_DYNAMIC = ''YES''',
+    'SELECT ''inventory'', ''iceberg_table_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.TABLES WHERE DELETED IS NULL AND IS_ICEBERG = ''YES''',
+    'SELECT ''inventory'', ''clustered_table_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.TABLES WHERE DELETED IS NULL AND CLUSTERING_KEY IS NOT NULL',
+    'SELECT ''inventory'', ''proc_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.PROCEDURES WHERE DELETED IS NULL',
+    'SELECT ''inventory'', ''function_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.FUNCTIONS WHERE DELETED IS NULL',
+    'SELECT ''inventory'', ''sequence_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.SEQUENCES WHERE DELETED IS NULL',
+    'SELECT ''inventory'', ''pipe_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.PIPES WHERE DELETED IS NULL',
+    'SELECT ''inventory'', ''external_stage_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.STAGES WHERE DELETED IS NULL AND STAGE_TYPE ILIKE ''%external%''',
+    'SELECT ''inventory'', ''shared_database_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.DATABASES WHERE DELETED IS NULL AND TYPE = ''IMPORTED DATABASE''',
+    'SELECT ''etl'', ''scheduler_jobs'', TO_VARCHAR(COUNT(DISTINCT DATABASE_NAME || ''.'' || SCHEMA_NAME || ''.'' || NAME)) FROM SNOWFLAKE.ACCOUNT_USAGE.TASK_HISTORY WHERE SCHEDULED_TIME >= DATEADD(day, -30, CURRENT_TIMESTAMP())',
+    -- code
+    'SELECT ''code'', ''proc_language_'' || LOWER(PROCEDURE_LANGUAGE), TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.PROCEDURES WHERE DELETED IS NULL GROUP BY PROCEDURE_LANGUAGE',
+    'SELECT ''code'', ''function_language_'' || LOWER(FUNCTION_LANGUAGE), TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.FUNCTIONS WHERE DELETED IS NULL GROUP BY FUNCTION_LANGUAGE',
+    'SELECT ''code'', ''code_lines'', TO_VARCHAR(COALESCE(SUM(REGEXP_COUNT(PROCEDURE_DEFINITION, CHR(10)) + 1), 0)) FROM SNOWFLAKE.ACCOUNT_USAGE.PROCEDURES WHERE DELETED IS NULL',
+    'SELECT ''code'', ''view_lines'', TO_VARCHAR(COALESCE(SUM(REGEXP_COUNT(VIEW_DEFINITION, CHR(10)) + 1), 0)) FROM SNOWFLAKE.ACCOUNT_USAGE.VIEWS WHERE DELETED IS NULL',
+    'SELECT ''code'', ''flatten_views'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.VIEWS WHERE DELETED IS NULL AND VIEW_DEFINITION ILIKE ''%FLATTEN(%''',
+    'SELECT ''code'', ''stream_objects'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.PROCEDURES WHERE DELETED IS NULL AND PROCEDURE_DEFINITION ILIKE ''%METADATA$ACTION%''',
+    'SELECT ''code'', ''cortex_objects'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.PROCEDURES WHERE DELETED IS NULL AND PROCEDURE_DEFINITION ILIKE ''%SNOWFLAKE.CORTEX%''',
+    -- types
+    'SELECT ''types'', ''semi_structured_columns'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.COLUMNS WHERE DELETED IS NULL AND DATA_TYPE IN (''VARIANT'', ''OBJECT'', ''ARRAY'')',
+    'SELECT ''types'', ''spatial_columns'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.COLUMNS WHERE DELETED IS NULL AND DATA_TYPE IN (''GEOGRAPHY'', ''GEOMETRY'')',
+    'SELECT ''types'', ''tz_columns'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.COLUMNS WHERE DELETED IS NULL AND DATA_TYPE IN (''TIMESTAMP_TZ'', ''TIMESTAMP_LTZ'')',
+    'SELECT ''types'', ''vector_columns'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.COLUMNS WHERE DELETED IS NULL AND DATA_TYPE ILIKE ''VECTOR%''',
+    -- security
+    'SELECT ''security'', ''rls_policy_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.POLICY_REFERENCES WHERE POLICY_KIND = ''ROW_ACCESS_POLICY''',
+    'SELECT ''security'', ''masked_column_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.POLICY_REFERENCES WHERE POLICY_KIND = ''MASKING_POLICY''',
+    'SELECT ''security'', ''role_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.ROLES WHERE DELETED_ON IS NULL',
+    -- workload
+    'SELECT ''workload'', ''user_count'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.USERS WHERE DELETED_ON IS NULL AND DISABLED = FALSE',
+    'SELECT ''workload'', ''queries_30d'', TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY WHERE START_TIME >= DATEADD(day, -30, CURRENT_TIMESTAMP())',
+    'SELECT ''workload'', ''dbql_days'', ''30''',
+    'SELECT ''workload'', ''peak_hour_queries'', TO_VARCHAR(MAX(c)) FROM (SELECT DATE_TRUNC(''hour'', START_TIME) h, COUNT(*) c FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY WHERE START_TIME >= DATEADD(day, -30, CURRENT_TIMESTAMP()) GROUP BY 1)',
+    'SELECT ''workload'', ''credits_30d'', TO_VARCHAR(ROUND(SUM(CREDITS_USED), 1)) FROM SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY WHERE START_TIME >= DATEADD(day, -30, CURRENT_TIMESTAMP())',
+    'SELECT ''workload'', ''warehouse_count'', TO_VARCHAR(COUNT(DISTINCT WAREHOUSE_NAME)) FROM SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY WHERE START_TIME >= DATEADD(day, -30, CURRENT_TIMESTAMP())',
+    'SELECT ''workload'', ''scanned_tb_30d'', TO_VARCHAR(ROUND(SUM(BYTES_SCANNED) / POWER(1024, 4), 2)) FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY WHERE START_TIME >= DATEADD(day, -30, CURRENT_TIMESTAMP())',
+    -- client applications (BI / ETL tools) and the largest tables
+    'SELECT ''client_app'', LEFT(COALESCE(TRY_PARSE_JSON(CLIENT_ENVIRONMENT):APPLICATION::STRING, CLIENT_APPLICATION_ID), 100), TO_VARCHAR(COUNT(*)) FROM SNOWFLAKE.ACCOUNT_USAGE.SESSIONS WHERE CREATED_ON >= DATEADD(day, -30, CURRENT_TIMESTAMP()) GROUP BY 2 ORDER BY 3 DESC LIMIT 40',
+    'SELECT ''table_top'', TABLE_CATALOG || ''.'' || TABLE_SCHEMA || ''.'' || TABLE_NAME, TO_VARCHAR(ROUND(BYTES / POWER(1024, 3), 3)) || ''|'' || TO_VARCHAR(ROW_COUNT) FROM SNOWFLAKE.ACCOUNT_USAGE.TABLES WHERE DELETED IS NULL AND TABLE_TYPE = ''BASE TABLE'' ORDER BY BYTES DESC NULLS LAST LIMIT 25'
+  );
+  n := ARRAY_SIZE(stmts);
+  FOR i IN 0 TO n - 1 DO
+    q := 'INSERT INTO fab_disc ' || stmts[i]::VARCHAR;
+    BEGIN
+      EXECUTE IMMEDIATE :q;
+    EXCEPTION
+      WHEN OTHER THEN
+        err := LEFT(REPLACE(SQLERRM, ',', ' '), 300);
+        INSERT INTO fab_disc VALUES ('error', 'statement_' || :i, :err);
+    END;
+  END FOR;
+  res := (SELECT section, REPLACE(metric, ',', ' ') AS metric, REPLACE(value, ',', ' ') AS value FROM fab_disc ORDER BY section, metric);
+  RETURN TABLE(res);
+END;
+$$;

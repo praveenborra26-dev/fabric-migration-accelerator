@@ -3,7 +3,7 @@
   'use strict';
   const APP = window.FMA_APP; const KB = window.FMA_KB; const E = window.FMA_ENGINE; const H = APP.H; const esc = H.esc; const U = E.util;
   const SCRIPT_TEXT = window.FMA_SCRIPTS || {};
-  const SCRIPT_ORDER = ['sqlserver', 'oracle', 'teradata', 'db2luw', 'db2zos', 'db2i', 'sap_erp', 'sap_bw', 'hana', 'sap_checklist'];
+  const SCRIPT_ORDER = ['sqlserver', 'synapse', 'snowflake', 'databricks', 'redshift', 'bigquery', 'oracle', 'teradata', 'db2luw', 'db2zos', 'db2i', 'netezza', 'sap_erp', 'sap_bw', 'hana', 'sap_checklist', 'postgres', 'mysql', 'vertica', 'exasol', 'clickhouse', 'hive', 'generic'];
   APP.SCRIPT_ORDER = SCRIPT_ORDER;
 
   /* ============ Discovery ============ */

@@ -72,3 +72,19 @@ for (const p of ['sap_bw', 'sap_ecc', 'mssql']) {
   const s1 = E.newState(); s1.systems.push(E.newSystem(p, KB.PLATFORMS[p].short)); const r1 = E.compute(s1);
   console.log(' breakdown', p, r1.eff.ws.filter((w) => w.days > 1).map((w) => w.k + ' ' + Math.round(w.days)).join(', '));
 }
+
+// 6. discovery mapping for the newer platforms
+const fs2 = require('fs'); const path2 = require('path');
+[['snowflake_sample.csv', 'snowflake'], ['redshift_sample.csv', 'redshift'], ['postgres_sample.csv', 'postgres'], ['hive_sample.csv', 'hive']].forEach(([file, plat]) => {
+  const parsed = E.parseDiscovery(fs2.readFileSync(path2.join(__dirname, 'samples', file), 'utf8'));
+  ok(E.discoveryPlatform(parsed) === plat, file + ' detected as ' + plat + ' (got ' + E.discoveryPlatform(parsed) + ')');
+  const m = E.mapDiscovery(parsed, plat);
+  ok(m.fields.s_data_tb > 0 && m.fields.s_tables > 0, file + ' maps size and tables');
+  ok((m.fields.s_features || []).length >= 3, file + ' detects features: ' + (m.fields.s_features || []).join(' '));
+  const st = E.newState(); const sys = E.newSystem(plat); st.systems.push(sys);
+  E.applyDiscovery(st, sys, m, { file, rows: parsed.rows });
+  const r = E.compute(st); const x = r.systems[0];
+  console.log(' ', plat.padEnd(10), 'TB', x.f.tb, 'tables', x.f.tables, 'cx', x.cx.score, x.pattern.id, '|', x.pattern.name, '| F' + r.cap.sku.cu, 'eff', Math.round(r.eff.total), 'agentic', Math.round(r.comp.agentic * 100) + '%', 'gaps', x.gaps.length);
+  ok(isFinite(r.eff.total) && r.eff.total > 0, plat + ' effort computes');
+});
+console.log(fails ? 'SOME CHECKS FAILED' : 'NEW PLATFORM CHECKS PASSED');

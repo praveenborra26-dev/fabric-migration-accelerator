@@ -1,6 +1,14 @@
 # Fabric Migration Assessment Accelerator
 
-A self-contained web app that assesses an analytics migration to **Microsoft Fabric** from SQL Server, Oracle, Teradata, IBM Db2 (LUW, z/OS, IBM i), SAP ECC / S/4HANA, SAP BW / BW/4HANA and SAP HANA. Azure Synapse, Netezza and other platforms can be assessed through manual answers.
+A self-contained web app that assesses an analytics migration to **Microsoft Fabric** from any source platform. It has built-in knowledge (features, Fabric gaps, migration routes) and a read-only discovery script for 28 platform types:
+
+- **Microsoft:** SQL Server, Azure SQL Database / Managed Instance, Azure Synapse dedicated SQL pool
+- **Cloud data platforms:** Snowflake, Databricks (Azure, AWS, GCP), Amazon Redshift, Google BigQuery
+- **Enterprise warehouses and databases:** Oracle, Teradata, IBM Db2 (LUW, z/OS, IBM i), IBM Netezza, Vertica, Exasol, Greenplum
+- **SAP:** ECC, S/4HANA, BW, BW/4HANA, HANA, ASE (Sybase), IQ
+- **Open source:** PostgreSQL (incl. Aurora, Azure, Cloud SQL, AlloyDB), MySQL / MariaDB, ClickHouse
+- **Data lakes:** Hadoop / Hive / Impala (Cloudera, HDP, EMR, HDInsight, Dataproc)
+- **Anything else:** a generic INFORMATION_SCHEMA script plus manual intake for any SQL database
 
 The accelerator drafts most of the assessment automatically. Every question accepts *Not sure*, read-only discovery scripts measure each platform, and an engine produces the results. A reviewer then confirms the remaining items on a validation checklist and signs off.
 
@@ -80,20 +88,33 @@ The AI features call one function, `APP.caps.sample`, which Claude provides insi
 
 - **No backend and no telemetry.** Assessment data stays in the browser's local storage (key `fma.current.v1`) and in the files a user exports. Clearing the browser data removes it, so export the `.json` file to keep or share an assessment.
 - **One external call:** fonts load from Google Fonts. To avoid it, delete the three font `<link>` lines in `src/index.template.html` and rebuild. The app falls back to system fonts.
-- **Discovery scripts are read-only.** They query catalog views and query logs, never business data. The SQL Server and Teradata scripts create session-only temporary tables that disappear at logoff.
+- **Discovery scripts are read-only.** They query catalog views, statistics and query logs, never business data. The SQL Server, Teradata, Snowflake and BigQuery scripts create session-only temporary tables that disappear when the session ends.
 
 | Script | Platform | Run with | Permissions |
 |---|---|---|---|
-| `fabric_discovery_sqlserver.sql` | SQL Server | SSMS or Azure Data Studio | VIEW SERVER STATE, VIEW ANY DEFINITION |
+| `fabric_discovery_sqlserver.sql` | SQL Server / Azure SQL MI | SSMS or Azure Data Studio | VIEW SERVER STATE, VIEW ANY DEFINITION |
 | `fabric_discovery_oracle.sql` | Oracle | SQL*Plus or SQLcl | SELECT_CATALOG_ROLE |
 | `fabric_discovery_teradata.bteq` | Teradata | BTEQ (or Teradata Studio) | SELECT on DBC views and DBC.QryLogV |
-| `fabric_discovery_db2luw.sql` | Db2 LUW | Db2 CLP (`db2 -x -tf`) | CONNECT, catalog SELECT, SYSMON |
+| `fabric_discovery_db2luw.sql` | Db2 LUW | Db2 CLP (db2 -x -tf) | CONNECT, catalog SELECT, SYSMON |
 | `fabric_discovery_db2zos.sql` | Db2 z/OS | SPUFI, DSNTEP2 or Data Studio | SELECT on the SYSIBM catalog |
 | `fabric_discovery_db2i.sql` | Db2 for i | ACS Run SQL Scripts | *USE on QSYS2 services |
-| `fabric_discovery_sap_erp_hana.sql` | SAP ECC / S/4HANA | HANA Database Explorer / Studio | Read-only user on the ABAP schema (check your SAP licence) |
-| `fabric_discovery_sap_bw_hana.sql` | SAP BW / BW/4HANA | HANA Database Explorer / Studio | Read-only user on the BW schema (check your SAP licence) |
+| `fabric_discovery_sap_erp_hana.sql` | SAP ECC / S/4HANA | HANA Database Explorer / Studio | Read-only user on the ABAP schema (check licence) |
+| `fabric_discovery_sap_bw_hana.sql` | SAP BW / BW/4HANA | HANA Database Explorer / Studio | Read-only user on the BW schema (check licence) |
 | `fabric_discovery_hana_native.sql` | SAP HANA native | HANA Database Explorer / Studio | CATALOG READ |
-| `fabric_discovery_sap_checklist.csv` | SAP on any database | SAP GUI transactions | Basis / BW administrator |
+| `fabric_discovery_synapse.sql` | Azure Synapse | sqlcmd or SSMS | VIEW DATABASE STATE, VIEW DEFINITION |
+| `fabric_discovery_snowflake.sql` | Snowflake | Snowsight worksheet or SnowSQL | IMPORTED PRIVILEGES on the SNOWFLAKE database |
+| `fabric_discovery_databricks.py` | Databricks | Databricks notebook (Python) | Catalog metadata access; SELECT on system tables |
+| `fabric_discovery_redshift.sql` | Amazon Redshift | psql or Query editor v2 | Superuser, or sys:monitor + ACCESS SYSTEM TABLE |
+| `fabric_discovery_bigquery.sql` | Google BigQuery | BigQuery console (one run per region) | BigQuery Metadata Viewer + Resource Viewer |
+| `fabric_discovery_postgres.sql` | PostgreSQL / Greenplum | psql (one run per database) | Login; pg_read_all_stats for workload |
+| `fabric_discovery_mysql.sql` | MySQL / MariaDB | mysql client (--batch --force) | PROCESS, SELECT on information_schema |
+| `fabric_discovery_netezza.sql` | Netezza | nzsql | ADMIN or LIST/SELECT on _V_ views |
+| `fabric_discovery_vertica.sql` | Vertica | vsql | dbadmin or SYSMONITOR role |
+| `fabric_discovery_exasol.sql` | Exasol | DBeaver or another SQL client | SELECT ANY DICTIONARY |
+| `fabric_discovery_clickhouse.sql` | ClickHouse | clickhouse-client (--format CSV) | SELECT on system tables |
+| `fabric_discovery_hive_metastore.sql` | Hadoop / Hive metastore | mysql or psql on the metastore database | Read-only login on the metastore database |
+| `fabric_discovery_generic.sql` | Any other database (ANSI) | Any SQL client | Read access to INFORMATION_SCHEMA |
+| `fabric_discovery_sap_checklist.csv` | SAP transaction checklist | SAP GUI transactions | Basis / BW administrator |
 
 ---
 

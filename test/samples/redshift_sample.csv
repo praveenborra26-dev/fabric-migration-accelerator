@@ -1,0 +1,25 @@
+platform,platform,redshift
+platform,version,PostgreSQL 8.0.2 on i686-pc-linux-gnu  Redshift 1.0.77467
+size,total_size_gb,21500.3
+size,largest_table_gb,1800.2
+inventory,table_count,3400
+inventory,database_count,3
+inventory,schema_count,45
+inventory,distkey_table_count,900
+inventory,view_count,1200
+inventory,mview_count,25
+inventory,proc_count,180
+inventory,function_count,40
+code,python_udf_count,12
+code,code_lines,24000
+inventory,external_schema_count,4
+inventory,external_table_count,160
+types,super_columns,85
+workload,queries_30d,840000
+workload,dbql_days,7
+workload,peak_hour_queries,9800
+workload,user_count,420
+workload,wlm_queue_count,4
+client_app,Tableau Desktop,12000
+client_app,Matillion,3000
+table_top,public.fact_events,1800.2|9200000000

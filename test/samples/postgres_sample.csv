@@ -1,0 +1,24 @@
+platform|platform|postgres
+platform|version|PostgreSQL 15.6
+size|total_size_gb|820.4
+size|largest_table_gb|120.5
+inventory|table_count|640
+inventory|view_count|85
+inventory|mview_count|6
+inventory|partitioned_table_count|12
+inventory|inherited_table_count|12
+inventory|sequence_count|300
+inventory|trigger_count|44
+inventory|proc_count|20
+inventory|function_count|180
+code|language_plpgsql|190
+code|code_lines|21000
+inventory|extension_postgis|3.4.2
+inventory|extension_pg_stat_statements|1.10
+types|json_columns|60
+types|array_columns|14
+security|rls_policy_count|3
+workload|daily_queries|2500000
+workload|peak_connections|180
+cdc|wal_level|replica
+client_app|PostgreSQL JDBC Driver|120

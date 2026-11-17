@@ -1,0 +1,17 @@
+platform	platform	hive
+platform	version	3.1.3000
+size	total_size_gb	180000
+size	partition_size_gb	420000
+size	largest_table_gb	22000
+inventory	database_count	85
+inventory	table_count	14200
+inventory	external_table_count	6100
+inventory	view_count	1800
+inventory	partition_count	2100000
+inventory	function_count	95
+inventory	acid_table_count	300
+inventory	hbase_kudu_table_count	40
+types	format_orc	8200
+types	format_parquet	4100
+types	format_text	1900
+types	complex_columns	3400

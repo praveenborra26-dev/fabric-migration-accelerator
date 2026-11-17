@@ -98,7 +98,7 @@
     org_drivers: (c) => {
       const d = ['cost', 'ai'];
       if (anyPlat(c, ['sap_ecc', 'sap_bw'])) d.push('eol', 'sap');
-      else if (anyPlat(c, ['teradata', 'netezza', 'db2zos'])) d.push('eol');
+      else if (anyPlat(c, ['teradata', 'netezza', 'db2zos', 'hive', 'greenplum', 'sap_iq', 'sap_ase'])) d.push('eol');
       if (c.systems.length > 2) d.push('consol');
       return D(d, 'Typical drivers for this estate');
     },
@@ -106,7 +106,9 @@
     org_ms: () => D(['e3', 'entra', 'azure'], 'Typical Microsoft footprint'),
     etl_tools: (c) => {
       const t = [];
-      if (anyPlat(c, ['mssql'])) t.push('ssis');
+      if (anyPlat(c, ['mssql', 'azure_sql'])) t.push('ssis');
+      if (anyPlat(c, ['snowflake', 'bigquery', 'redshift', 'databricks'])) t.push('dbt');
+      if (anyPlat(c, ['hive'])) t.push('oozie');
       if (anyPlat(c, ['teradata'])) t.push('bteq');
       if (anyPlat(c, ['oracle', 'db2luw', 'db2zos', 'netezza']) && ['m', 'l', 'xl'].indexOf(c.size()) >= 0) t.push('infa');
       if (anyPlat(c, ['sap_ecc', 'sap_s4']) && !anyPlat(c, ['sap_bw', 'sap_bw4'])) t.push('bods');
@@ -329,7 +331,7 @@
     return res;
   }
 
-  const PLATFORM_ALIASES = { mssql: 'mssql', sqlserver: 'mssql', oracle: 'oracle', teradata: 'teradata', db2luw: 'db2luw', db2zos: 'db2zos', db2i: 'db2i', sap_erp: 'sap_ecc', sap_bw: 'sap_bw', sap_hana: 'sap_hana', hana: 'sap_hana' };
+  const PLATFORM_ALIASES = { synapse: 'synapse', netezza: 'netezza', snowflake: 'snowflake', databricks: 'databricks', redshift: 'redshift', bigquery: 'bigquery', postgres: 'postgres', postgresql: 'postgres', greenplum: 'greenplum', mysql: 'mysql', mariadb: 'mysql', vertica: 'vertica', exasol: 'exasol', clickhouse: 'clickhouse', hive: 'hive', hadoop: 'hive', other: 'other', azure_sql: 'azure_sql', mssql: 'mssql', sqlserver: 'mssql', oracle: 'oracle', teradata: 'teradata', db2luw: 'db2luw', db2zos: 'db2zos', db2i: 'db2i', sap_erp: 'sap_ecc', sap_bw: 'sap_bw', sap_hana: 'sap_hana', hana: 'sap_hana' };
   E.discoveryPlatform = (parsed) => PLATFORM_ALIASES[parsed.platform] || null;
 
   E.mapDiscovery = (parsed, platform) => {
@@ -339,7 +341,9 @@
     const fields = {}; const feats = new Set(); const glob = {}; const notes = [];
     const set = (id, v) => { if (v != null && isFinite(v)) fields[id] = v; };
     const gb = n('size.used_size_gb') != null && n('size.used_size_gb') > 0 ? n('size.used_size_gb') : (n('size.total_size_gb') != null ? n('size.total_size_gb') : n('size.allocated_size_gb'));
-    if (gb != null) set('s_data_tb', round(gb / 1024, 2));
+    let gbAll = gb;
+    if (gbAll != null && n('size.partition_size_gb') != null) { gbAll += n('size.partition_size_gb'); notes.push('Size includes partition statistics; tables without statistics count as 0 GB.'); }
+    if (gbAll != null) set('s_data_tb', round(gbAll / 1024, 2));
     if (n('size.largest_table_gb') != null) set('s_largest_gb', round(n('size.largest_table_gb'), 1));
     const ver = M['platform.version'] || M['platform.release'] || M['platform.hana_version'];
     if (ver) fields.s_version = prettyVersion(platform, ver, M);
@@ -358,7 +362,7 @@
       if (loc == null && n('code.proc_macro_chars') != null) { loc = Math.round(n('code.proc_macro_chars') / 40); notes.push('Lines of code estimated from object text length (Teradata stores up to 12,500 characters per object).'); }
       if (loc == null && n('code.code_chars') != null) { loc = Math.round(n('code.code_chars') / 45); notes.push('Lines of code estimated from object text length.'); }
       set('s_loc', loc);
-      const typeKeys = Object.keys(M).filter((k) => k.indexOf('types.') === 0 && !/other_columns|columns_total|unsupported_type_columns|ebcdic_tables|decimal_columns/.test(k));
+      const typeKeys = Object.keys(M).filter((k) => k.indexOf('types.') === 0 && !/other_columns|columns_total|unsupported_type_columns|ebcdic_tables|decimal_columns|format_|lowcardinality/.test(k));
       const typeTotal = n('types.unsupported_type_columns') != null ? n('types.unsupported_type_columns') : (typeKeys.length ? sum(typeKeys.map((k) => n(k))) : null);
       set('s_types', typeTotal);
       if (platform === 'sap_hana') { set('s_hana_calcviews', n('inventory.calc_view_count')); }
@@ -377,7 +381,7 @@
     else if (n('workload.user_sessions_now') != null) set('s_concurrency', n('workload.user_sessions_now'));
 
     // ETL and BI signals
-    const etlJobs = s('etl.agent_jobs', 'etl.ssisdb_packages', 'etl.msdb_ssis_packages', 'etl.scheduler_jobs', 'etl.legacy_jobs');
+    const etlJobs = s('etl.agent_jobs', 'etl.ssisdb_packages', 'etl.msdb_ssis_packages', 'etl.scheduler_jobs', 'etl.legacy_jobs', 'etl.pipeline_count');
     if (etlJobs != null && etlJobs > 0) set('s_etl_jobs', etlJobs);
     if (n('bi.ssrs_reports') != null) set('s_reports', n('bi.ssrs_reports'));
     const etlTools = new Set(); const biTools = new Set(); const dsTools = new Set();
@@ -403,6 +407,13 @@
     if (platform === 'db2zos') fields.s_cdc = has0('cdc.data_capture_tables') ? 'enabled' : 'possible';
     if (platform === 'db2i') fields.s_cdc = has0('cdc.journaled_files') ? 'enabled' : 'possible';
     if (platform === 'teradata') fields.s_cdc = 'none';
+    if (['snowflake', 'bigquery', 'databricks'].indexOf(platform) >= 0) fields.s_cdc = 'possible';
+    if (['redshift', 'greenplum', 'vertica', 'exasol', 'clickhouse', 'hive', 'netezza', 'synapse'].indexOf(platform) >= 0) fields.s_cdc = 'none';
+    if (platform === 'postgres' && M['cdc.wal_level']) { fields.s_cdc = String(M['cdc.wal_level']).toLowerCase() === 'logical' ? 'enabled' : 'possible'; if (fields.s_cdc === 'possible') notes.push('wal_level is not logical: CDC-based replication needs wal_level = logical (a restart).'); }
+    if (platform === 'mysql' && M['cdc.binlog_format']) { const on = /^(1|on)$/i.test(String(M['cdc.log_bin'] || '')); fields.s_cdc = on && String(M['cdc.binlog_format']).toUpperCase() === 'ROW' ? 'enabled' : 'possible'; }
+    if (n('workload.credits_30d') != null) notes.push('Snowflake used ' + fmtNum(n('workload.credits_30d')) + ' credits in 30 days: multiply by your credit price for the current run cost.');
+    if (n('workload.dbu_30d') != null) notes.push('Databricks used ' + fmtNum(n('workload.dbu_30d')) + ' DBUs in 30 days: multiply by your DBU price for the current run cost.');
+    if (n('workload.billed_tb_30d') != null) notes.push('BigQuery billed ' + fmtNum(n('workload.billed_tb_30d')) + ' TB scanned in 30 days' + (n('workload.avg_slots') != null ? ' (about ' + fmtNum(n('workload.avg_slots')) + ' slots on average)' : '') + '.');
     if (fields.s_cdc === undefined) delete fields.s_cdc;
 
     // security signals
@@ -449,6 +460,70 @@
       if (platform === 'db2i') { F('dds', has0('inventory.dds_physical_file_count') || has0('inventory.logical_file_count')); F('rpg', has0('inventory.program_count')); F('journaling', has0('cdc.journaled_files')); F('packed', has0('types.packed_decimal_columns') || has0('types.zoned_decimal_columns')); F('ebcdic', has0('types.ebcdic_char_columns')); }
     } else if (platform === 'sap_hana') {
       F('calc_views', has0('inventory.calc_view_count')); F('sqlscript', has0('inventory.proc_count'));
+    } else if (platform === 'snowflake') {
+      const lang = (pre, ls) => ls.some((l) => has0('code.' + pre + l));
+      F('sf_variant', has0('types.semi_structured_columns')); F('sf_flatten', has0('code.flatten_views')); F('sf_streams_tasks', has0('code.stream_objects') || has0('etl.scheduler_jobs'));
+      F('sf_snowpipe', has0('inventory.pipe_count')); F('sf_scripting', has0('code.proc_language_sql')); F('sf_js_proc', lang('proc_language_', ['javascript', 'python', 'java', 'scala']) || lang('function_language_', ['javascript', 'python', 'java', 'scala']));
+      F('sf_dynamic', has0('inventory.dynamic_table_count')); F('mviews', has0('inventory.mview_count')); F('sf_secure_views', has0('inventory.secure_view_count'));
+      F('sf_sharing', has0('inventory.shared_database_count')); F('sf_iceberg', has0('inventory.iceberg_table_count')); F('ext_tables', has0('inventory.external_table_count') || has0('inventory.external_stage_count'));
+      F('sf_tz', has0('types.tz_columns')); F('sf_snowpark', has0('code.cortex_objects') || has0('code.proc_language_python')); F('sequences', has0('inventory.sequence_count'));
+      F('rls', has0('security.rls_policy_count')); F('ddm', has0('security.masked_column_count')); F('spatial', has0('types.spatial_columns'));
+      if (has0('inventory.iceberg_table_count')) notes.push('Iceberg tables can be read in place through OneLake shortcuts instead of being copied.');
+    } else if (platform === 'databricks') {
+      F('dbx_delta', has0('inventory.table_count')); feats.add('dbx_notebooks'); F('dbx_jobs', has0('etl.scheduler_jobs')); F('dbx_dlt', has0('etl.pipeline_count') || has0('inventory.streaming_table_count'));
+      F('dbx_streaming', has0('inventory.streaming_table_count')); F('dbx_uc', has0('security.rls_policy_count') || has0('security.masked_column_count')); F('dbx_mlflow', has0('code.ml_model_count'));
+      F('dbx_hms', has0('inventory.hive_metastore_tables')); F('dbx_non_delta', has0('inventory.non_delta_table_count')); F('mviews', has0('inventory.mview_count'));
+      F('udfs', has0('code.python_function_count')); F('ext_tables', has0('inventory.external_table_count')); F('bq_nested', has0('types.nested_columns'));
+      if (n('size.tables_sized') != null && n('inventory.table_count') != null && n('size.tables_sized') < n('inventory.table_count')) notes.push('Size measured for ' + fmtInt(n('size.tables_sized')) + ' of ' + fmtInt(n('inventory.table_count')) + ' tables (Delta tables only, up to the script limit).');
+    } else if (platform === 'redshift') {
+      F('rs_plpgsql', has0('inventory.proc_count')); F('rs_super', has0('types.super_columns')); F('rs_spectrum', has0('inventory.external_schema_count') || has0('inventory.external_table_count'));
+      F('rs_datashare', has0('inventory.datashare_count')); F('rs_pyudf', has0('code.python_udf_count') || has0('code.lambda_udf_count')); F('rs_dist', has0('inventory.distkey_table_count'));
+      F('rs_federated', has0('inventory.federated_schema_count')); F('wlm', (n('workload.wlm_queue_count') || 0) > 1); F('mviews', has0('inventory.mview_count'));
+      F('spatial', has0('types.spatial_columns')); F('sf_tz', has0('types.tz_columns')); F('rls', has0('security.rls_policy_count')); F('ddm', has0('security.masked_column_count'));
+      notes.push('Redshift keeps about 7 days of query history: queries per day are averaged over that window.');
+    } else if (platform === 'bigquery') {
+      F('bq_nested', has0('types.nested_columns')); F('bq_json', has0('types.json_columns')); F('bq_scripting', has0('inventory.proc_count')); F('bq_js_udf', has0('code.js_function_count') || has0('code.remote_function_count'));
+      F('bq_scheduled', has0('etl.scheduler_jobs')); F('bq_ml', has0('code.ml_model_queries')); F('bq_partition', has0('inventory.partitioned_table_count'));
+      F('bq_policy', has0('security.rls_policy_count') || has0('security.masked_column_count')); F('bq_streaming', has0('workload.streaming_tables')); F('mviews', has0('inventory.mview_count'));
+      F('ext_tables', has0('inventory.external_table_count')); F('spatial', has0('types.spatial_columns'));
+    } else if (platform === 'postgres' || platform === 'greenplum') {
+      const ext = Object.keys(M).filter((k) => k.indexOf('inventory.extension_') === 0);
+      F('pg_plpgsql', has0('code.language_plpgsql')); F('triggers', has0('inventory.trigger_count')); F('sequences', has0('inventory.sequence_count')); F('mviews', has0('inventory.mview_count'));
+      F('pg_extensions', ext.length > 0); F('spatial', ext.some((k) => /postgis/.test(k)) || has0('types.spatial_columns')); F('pg_arrays', has0('types.json_columns') || has0('types.array_columns') || has0('types.user_defined_columns'));
+      F('pg_inherit', (n('inventory.inherited_table_count') || 0) > (n('inventory.partitioned_table_count') || 0)); F('pg_fdw', has0('inventory.fdw_server_count') || has0('inventory.foreign_table_count'));
+      F('partitioning', has0('inventory.partitioned_table_count')); F('recursive', has0('code.recursive_views')); F('dynamic_sql', has0('code.dynamic_sql_objects')); F('rls', has0('security.rls_policy_count')); F('sf_tz', has0('types.tz_columns'));
+      if (platform === 'greenplum') { feats.add('gp_dist'); F('ext_tables', has0('inventory.external_table_count')); }
+      if (ext.length) notes.push('Extensions in use: ' + ext.map((k) => k.replace('inventory.extension_', '')).join(', ') + '.');
+      notes.push('PostgreSQL catalogs are per database: run the script in each database in scope and import each file into the same system.');
+    } else if (platform === 'mysql') {
+      F('my_procs', has0('inventory.proc_count')); F('triggers', has0('inventory.trigger_count')); F('my_events', has0('etl.scheduler_jobs')); F('cursors', has0('code.cursor_objects'));
+      F('bq_json', has0('types.json_columns')); F('my_enum', has0('types.enum_set_columns')); F('my_unsigned', has0('types.unsigned_columns')); F('spatial', has0('types.spatial_columns'));
+      F('fulltext', has0('inventory.fulltext_index_count')); F('partitioning', has0('inventory.partitioned_table_count')); F('my_myisam', has0('inventory.non_innodb_table_count'));
+    } else if (platform === 'vertica') {
+      feats.add('vt_projections'); F('vt_flex', has0('inventory.flex_table_count')); F('udfs', has0('code.udx_count')); F('db_ml', has0('code.ml_model_count')); F('sequences', has0('inventory.sequence_count'));
+      F('ext_tables', has0('inventory.external_table_count')); F('spatial', has0('types.spatial_columns')); F('sf_tz', has0('types.tz_columns')); F('rls', has0('security.rls_policy_count')); F('ddm', has0('security.masked_column_count'));
+    } else if (platform === 'exasol') {
+      F('ex_scripts', has0('code.udf_script_count')); F('generic_procs', has0('inventory.proc_count')); F('ex_virtual', has0('inventory.virtual_schema_count') || has0('inventory.connection_count'));
+      F('spatial', has0('types.geometry_columns')); F('udfs', has0('inventory.function_count'));
+    } else if (platform === 'clickhouse') {
+      F('ch_engines', has0('inventory.special_engine_tables')); F('ch_mviews', has0('inventory.mview_count')); F('ch_dicts', has0('inventory.dictionary_count'));
+      F('ch_complex', has0('types.complex_columns') || has0('types.lowcardinality_columns')); F('kafka_engine', has0('inventory.kafka_table_count')); F('udfs', has0('inventory.function_count'));
+    } else if (platform === 'hive') {
+      feats.add('hv_hql'); F('hv_formats', has0('types.format_orc') || has0('types.format_avro') || has0('types.format_text') || has0('types.format_sequence'));
+      F('hv_udfs', has0('inventory.function_count')); F('hv_hbase', has0('inventory.hbase_kudu_table_count')); F('hv_acid', has0('inventory.acid_table_count'));
+      F('ext_tables', has0('inventory.external_table_count')); F('bq_nested', has0('types.complex_columns'));
+      const fmts = Object.keys(M).filter((k) => k.indexOf('types.format_') === 0 && has0(k)).map((k) => k.replace('types.format_', '') + ' ' + fmtInt(n(k)));
+      if (fmts.length) notes.push('Table formats: ' + fmts.join(', ') + '.');
+    } else if (platform === 'synapse') {
+      F('mviews', has0('inventory.mview_count')); F('dynamic_sql', has0('code.dynamic_sql_objects')); F('rls', has0('security.rls_policy_count')); F('ddm', has0('security.masked_column_count'));
+      F('unicode', has0('types.col_nvarchar')); F('legacy_types', has0('types.col_datetime')); F('sy_polybase', has0('inventory.external_table_count')); F('sy_ctas', has0('code.ctas_objects'));
+      F('wlm', has0('workload.workload_group_count'));
+    } else if (platform === 'netezza') {
+      F('nzplsql', has0('inventory.proc_count')); F('mviews', has0('inventory.mview_count')); F('udx', has0('code.udx_count')); F('sequences', has0('inventory.sequence_count'));
+      F('synonyms', has0('inventory.synonym_count')); F('nzload', has0('inventory.external_table_count')); feats.add('distkeys'); feats.add('zonemaps');
+    } else if (platform === 'other') {
+      F('generic_procs', has0('inventory.proc_count')); F('udfs', has0('inventory.function_count')); F('pg_arrays', has0('types.complex_columns') || has0('types.json_xml_columns'));
+      notes.push('The generic script does not measure size or workload: enter them by hand.');
     }
 
     // SAP
@@ -669,6 +744,71 @@
       P.code = 'Calculation views to Warehouse views or semantic models; SQLScript to T-SQL or PySpark.';
       P.prereqs.push('Confirm the HANA licence allows direct extraction (runtime licences restrict it).');
       P.tools.push('SAP HANA connector', 'Copy job / pipelines');
+    } else if (plat === 'azure_sql') {
+      if (offload || f.role === 'oltp' || f.role === 'replica') {
+        Object.assign(P, { id: 'mirror', name: 'Mirror Azure SQL into OneLake, then build the medallion', quickWin: true, mirror: true });
+        P.ingest.push('Mirroring for Azure SQL Database / Managed Instance keeps tables in sync in near real time, with no pipelines.');
+      } else {
+        Object.assign(P, { id: 'migrate_wh', name: 'Re-platform to Fabric Warehouse with the Migration Assistant' });
+        P.ingest.push('Fabric Migration Assistant for Data Warehouse (DACPAC) translates schema and T-SQL objects.', 'Mirroring keeps data in sync during the parallel run.');
+        P.code = 'T-SQL stays T-SQL: fix the Fabric Warehouse surface-area gaps (no triggers, cursors, sequences or materialized views).';
+      }
+      P.tools.push('Mirroring for Azure SQL', 'Fabric Migration Assistant', 'Copy job');
+    } else if (plat === 'snowflake') {
+      if (offload) {
+        Object.assign(P, { id: 'mirror', name: 'Mirror Snowflake into OneLake, then build on it', quickWin: true, mirror: true });
+        P.ingest.push('Mirroring for Snowflake replicates managed tables into OneLake continuously; Iceberg tables can be read in place through metadata mirroring or OneLake shortcuts.');
+      } else {
+        Object.assign(P, { id: 'migrate', name: 'Migrate Snowflake to Fabric (mirror the data, convert the SQL)', mirror: true });
+        P.ingest.push('Mirroring for Snowflake for the historical load and to keep data in sync during the parallel run, without extraction pipelines.', 'Iceberg tables: keep them in place and read them through OneLake and Snowflake interoperability (shortcuts) until cutover.');
+        P.code = 'Snowflake SQL to T-SQL (Warehouse) or Spark SQL: VARIANT and FLATTEN to JSON functions or Spark structs, QUALIFY works natively, Snowflake Scripting to T-SQL procedures, tasks and streams to pipelines. dbt projects can switch to the dbt-fabric adapter.';
+      }
+      P.prereqs.push('Mirroring reads from Snowflake with a warehouse you choose: Snowflake bills those credits until cutover.');
+      P.tools.push('Mirroring for Snowflake', 'OneLake shortcuts (Iceberg)', 'Copy job', 'dbt-fabric adapter', 'AI-assisted code conversion');
+    } else if (plat === 'databricks') {
+      if (offload) Object.assign(P, { id: 'mirror', name: 'Use Databricks Delta tables in Fabric without copying', quickWin: true, mirror: true });
+      else Object.assign(P, { id: 'migrate', name: 'Move Databricks workloads to Fabric Spark and OneLake', mirror: true });
+      P.ingest.push('Azure Databricks: the mirrored Azure Databricks catalog item exposes Unity Catalog tables in Fabric through metadata mirroring, without copying data.', 'Databricks on AWS or Google Cloud: OneLake shortcuts to the Delta tables in Amazon S3 or Google Cloud Storage.');
+      if (!offload) { P.ingest.push('When the Databricks storage is retired, rewrite tables as OneLake-managed Delta (Spark or Copy job).'); P.code = 'Notebooks move to Fabric notebooks with small changes (dbutils to notebookutils, cluster settings to environments); jobs to pipelines; DLT to materialized lake views; MLflow models re-registered in Fabric Data Science.'; }
+      P.tools.push('Mirrored Azure Databricks catalog', 'OneLake shortcuts (S3 / GCS / ADLS)', 'Fabric notebooks', 'Fabric pipelines');
+    } else if (plat === 'redshift') {
+      Object.assign(P, { id: offload ? 'offload' : 'migrate', name: offload ? 'Offload Redshift data to OneLake' : 'Migrate Redshift to Fabric (UNLOAD to S3, shortcuts, convert SQL)' });
+      P.ingest.push('Bulk: UNLOAD tables to Amazon S3 as Parquet, create OneLake shortcuts to the bucket and load into Warehouse or Lakehouse (COPY INTO or Spark).', 'Increments and smaller tables: Copy job or pipelines with the Amazon Redshift connector.', 'Continuous sync during the parallel run, if needed: partner CDC through open mirroring.');
+      if (!offload) P.code = 'Redshift SQL (PostgreSQL dialect) to T-SQL or Spark SQL; PL/pgSQL to T-SQL procedures; SUPER to JSON functions; distribution and sort keys dropped.';
+      P.prereqs.push('AWS data egress charges apply to the bulk transfer; shortcut caching reduces repeated reads.');
+      P.tools.push('OneLake shortcuts (Amazon S3)', 'COPY INTO', 'Copy job', 'AI-assisted code conversion');
+    } else if (plat === 'bigquery') {
+      if (offload) Object.assign(P, { id: 'mirror', name: 'Mirror BigQuery into OneLake, then build on it', quickWin: true, mirror: true });
+      else { Object.assign(P, { id: 'migrate', name: 'Migrate BigQuery to Fabric (mirror the data, convert GoogleSQL)', mirror: true }); P.code = 'GoogleSQL to T-SQL or Spark SQL: STRUCT / ARRAY to child tables, JSON or Spark structs; scripting to T-SQL procedures; scheduled queries to pipelines; BigQuery ML to Fabric Data Science.'; }
+      P.ingest.push('Mirroring for Google BigQuery replicates tables into OneLake continuously, without pipelines.', 'External / BigLake tables on Google Cloud Storage: OneLake shortcuts.');
+      P.prereqs.push('Check Google Cloud query and egress costs for the initial load.');
+      P.tools.push('Mirroring for Google BigQuery', 'OneLake shortcuts (GCS)', 'Copy job', 'AI-assisted code conversion');
+    } else if (plat === 'postgres' || plat === 'mysql') {
+      const nm = plat === 'postgres' ? 'PostgreSQL' : 'MySQL';
+      if (offload || f.role === 'oltp' || f.role === 'replica') Object.assign(P, { id: 'mirror', name: 'Replicate ' + nm + ' into OneLake, then build the medallion', quickWin: true, mirror: true });
+      else { Object.assign(P, { id: 'migrate', name: 'Migrate ' + nm + ' to Fabric and convert the procedures', mirror: true }); P.code = plat === 'postgres' ? 'PL/pgSQL to T-SQL procedures or PySpark; arrays and JSONB to JSON functions or child tables.' : 'MySQL procedures to T-SQL; ENUM, unsigned and zero-date columns mapped during the load.'; }
+      if (plat === 'postgres') P.ingest.push('Azure Database for PostgreSQL (flexible server): Mirroring for Azure Database for PostgreSQL.', 'Other PostgreSQL (on-premises, RDS, Aurora, Cloud SQL, AlloyDB): Copy job incremental loads through the gateway, or open mirroring partners that read logical replication.');
+      else P.ingest.push('Azure Database for MySQL: mirroring (preview at the time of writing).', 'Other MySQL / MariaDB: Copy job incremental loads through the gateway, or open mirroring partners that read the binary log.');
+      P.prereqs.push(plat === 'postgres' ? 'Log-based replication needs wal_level = logical.' : 'Log-based replication needs row-based binary logging (binlog_format = ROW).');
+      P.tools.push('Mirroring (Azure-hosted)', 'Copy job', 'Open mirroring partners');
+    } else if (plat === 'greenplum' || plat === 'vertica' || plat === 'exasol' || plat === 'clickhouse' || plat === 'sap_iq') {
+      const nm = KB.PLATFORMS[plat].short;
+      Object.assign(P, { id: 'migrate', name: 'Migrate ' + nm + ' to Fabric (bulk export, convert SQL)' });
+      P.ingest.push({ greenplum: 'Bulk: parallel unload with writable external tables (gpfdist / PXF) to Parquet or CSV in cloud storage, then COPY INTO or Spark.', vertica: 'Bulk: EXPORT TO PARQUET into cloud storage, then OneLake shortcuts and COPY INTO or Spark.', exasol: 'Bulk: EXPORT tables to files in cloud storage, then COPY INTO or Spark.', clickhouse: 'Bulk: write tables to Parquet in object storage (s3 table function), then OneLake shortcuts and COPY INTO or Spark.', sap_iq: 'Bulk: unload tables to files (temporary extract options), land in OneLake and load with COPY INTO.' }[plat], 'Increments and smaller tables: Copy job or pipelines with the ODBC connector through the gateway.');
+      P.code = { greenplum: 'PL/pgSQL to T-SQL procedures; distribution keys and append-optimized options dropped.', vertica: 'Vertica SQL to T-SQL or Spark SQL; projections dropped; UDx and in-database ML rebuilt in Spark.', exasol: 'Exasol SQL to T-SQL; Lua / Python UDF scripts to notebooks or user data functions.', clickhouse: 'ClickHouse SQL to Spark SQL or T-SQL; engine semantics (Replacing / Summing / Aggregating) implemented explicitly; real-time ingestion through Eventstream.', sap_iq: 'Sybase T-SQL procedures to T-SQL (SSMA for SAP ASE as a starting point).' }[plat];
+      if (plat === 'clickhouse') P.notes.push('Sub-second, high-concurrency dashboards are often a better fit for Eventhouse (KQL) than Warehouse: decide per workload.');
+      P.tools.push('COPY INTO', 'OneLake shortcuts', 'Copy job', 'AI-assisted code conversion');
+    } else if (plat === 'hive') {
+      Object.assign(P, { id: 'migrate', name: 'Move the Hadoop data lake to OneLake and Fabric Spark', target: 'Fabric Lakehouse (Spark) + Warehouse for curated Gold' });
+      P.ingest.push('Copy HDFS data to ADLS Gen2 or OneLake (DistCp / AzCopy, or Azure Data Box for very large volumes), then convert tables to Delta in Bronze.', 'Data already in cloud storage (S3, GCS, ADLS): create OneLake shortcuts and convert in place.');
+      P.code = 'HiveQL / Impala SQL to Spark SQL notebooks; Oozie workflows to pipelines or Apache Airflow jobs; Spark jobs to Spark job definitions; MapReduce rewritten; Ranger policies to OneLake security.';
+      P.notes.push('Hadoop distributions (CDH, HDP) are out of vendor support: plan the move around licence and hardware renewal.');
+      P.tools.push('DistCp / AzCopy', 'OneLake shortcuts', 'Fabric notebooks', 'Apache Airflow job');
+    } else if (plat === 'sap_ase') {
+      Object.assign(P, { id: 'migrate_wh', name: 'Migrate SAP ASE to Fabric Warehouse' });
+      P.ingest.push('Historical load with Copy job or pipelines (ODBC connector) through the gateway.', 'Continuous sync during the parallel run: partner CDC through open mirroring.');
+      P.code = 'Sybase T-SQL is close to SQL Server T-SQL: SSMA for SAP ASE gives a starting point, then fix the Fabric Warehouse gaps.';
+      P.tools.push('SSMA for SAP ASE (conversion aid)', 'Copy job', 'Open mirroring partners');
     } else {
       Object.assign(P, { id: 'migrate', name: 'Migrate to Fabric with Copy job and code conversion' });
       P.ingest.push('Copy job or pipelines with the matching connector (ODBC if needed) through the gateway.');
@@ -708,7 +848,7 @@
     const bgCU = background / 86400;
     const conc = c.gv('bi_concurrency') || 0;
     const biCU = conc * 3 * 8 / 300;
-    const dwLog = ['teradata', 'netezza', 'synapse', 'sap_bw', 'sap_bw4', 'sap_hana'];
+    const dwLog = ['teradata', 'netezza', 'synapse', 'sap_bw', 'sap_bw4', 'sap_hana', 'snowflake', 'redshift', 'bigquery', 'databricks', 'greenplum', 'vertica', 'exasol', 'clickhouse', 'hive', 'sap_iq'];
     const sqlQ = sum(systems.map((x) => (['edw', 'mart', 'ods'].indexOf(x.f.role) >= 0 || x.f.fam === 'sap_bw' ? x.f.queries * (dwLog.indexOf(x.sys.platform) >= 0 ? 0.25 : 0.1) : 0)));
     const sqlCU = sqlQ * 10 / (10 * 3600) * 2.5;
     const interCU = biCU + sqlCU;
@@ -748,7 +888,7 @@
     // storage
     let storTb = 0; let mirroredTb = 0;
     systems.forEach((x) => {
-      const comp = ['teradata', 'netezza', 'sap_hana', 'sap_s4', 'sap_bw4'].indexOf(x.sys.platform) >= 0 ? 0.9 : 0.6;
+      const comp = ['teradata', 'netezza', 'sap_hana', 'sap_s4', 'sap_bw4', 'snowflake', 'redshift', 'bigquery', 'databricks', 'vertica', 'exasol', 'clickhouse', 'greenplum', 'sap_iq', 'hive'].indexOf(x.sys.platform) >= 0 ? 0.9 : 0.6;
       const lake = x.f.tb * comp;
       if (x.pattern.mirror) { mirroredTb += lake; storTb += lake * 1.2; } else storTb += lake * 2.0;
     });
@@ -990,7 +1130,7 @@
     if (systems.some((x) => x.sys.platform === 'sap_ecc' || x.sys.platform === 'sap_bw')) add('R-SAP-EOM', 'SAP ECC 6.0 / BW 7.5 mainstream maintenance ends 31 Dec 2027', 'Extended maintenance runs to 2030 at a premium; analytics design must survive the move to S/4HANA.', 4, 3, 'Align waves with the S/4HANA roadmap; extract through Datasphere/CDS views to limit rework.', 'Client sponsor', 'SAP');
     systems.filter((x) => x.sys.platform === 'sap_ecc' && x.f.s4 === 'inflight').forEach((x) => add('R-S4-' + x.sys.id, 'S/4HANA program in flight will change the source', 'Extraction built on ECC tables for ' + x.name + ' would be reworked after the S/4HANA cutover.', 4, 3, 'Sequence the SAP wave after the S/4HANA cutover or build on S/4HANA CDS views.', 'SAP lead', 'SAP', x.sys.id));
     systems.filter((x) => x.sys.platform === 'sap_hana' && c.sv(x.sys, 's_hana_license') !== 'full').forEach((x) => add('R-HANA-LIC-' + x.sys.id, 'HANA licence may restrict direct extraction', 'Runtime licences limit direct access by non-SAP tools.', 3, 3, 'Confirm licence type with SAP before choosing the extraction route.', 'SAP lead', 'Commercial', x.sys.id));
-    const bigCode = systems.filter((x) => ['oracle', 'teradata', 'db2luw', 'db2zos', 'netezza', 'other', 'sap_hana'].indexOf(x.sys.platform) >= 0 && x.f.scope === 'full' && x.f.loc > 300000);
+    const bigCode = systems.filter((x) => ['oracle', 'teradata', 'db2luw', 'db2zos', 'netezza', 'other', 'sap_hana', 'snowflake', 'redshift', 'bigquery', 'greenplum', 'vertica', 'exasol', 'postgres', 'sap_ase', 'sap_iq'].indexOf(x.sys.platform) >= 0 && x.f.scope === 'full' && x.f.loc > 300000);
     bigCode.forEach((x) => add('R-CODE-' + x.sys.id, 'Large procedural code base to convert', x.name + ' holds about ' + fmtInt(x.f.loc) + ' lines of procedural code.', 4, 4, 'AI-assisted conversion with an automated regression harness; retire unused objects first using query-log usage.', 'Data engineering lead', 'Technical', x.sys.id));
     systems.forEach((x) => {
       const F = x.f.features;
@@ -1021,7 +1161,7 @@
     if (totTb > 50) add('R-LOAD', 'Large historical load through gateways', fmtInt(totTb) + ' TB to move.', 3, 3, 'Bulk export to files with parallel copy, staged loads by subject area, gateway clusters sized for throughput.', 'Data engineering lead', 'Technical');
     if (inputConf < 0.6) add('R-INPUT', 'Estimates rely on benchmark defaults', 'Input confidence is ' + Math.round(inputConf * 100) + '%; run the discovery scripts to replace defaults with measured facts.', 4, 3, 'Run discovery scripts and the AI agent on existing documents, then re-validate.', 'Assessment lead', 'Assessment');
     if ((c.gv('tgt_parallel_weeks') || 0) >= 8) add('R-DUAL', 'Dual running cost during the parallel run', (c.gv('tgt_parallel_weeks')) + ' weeks of legacy and Fabric running together.', 3, 2, 'Shorten with automated reconciliation; reserve capacity only after the pilot.', 'Program manager', 'Commercial');
-    if (systems.some((x) => x.sys.platform === 'mssql' || x.sys.platform === 'synapse')) add('R-COPILOT', 'Migration Assistant AI fixes need Copilot', 'The AI-assisted fix step requires Copilot to be enabled in the tenant.', 2, 2, 'Enable Copilot in the tenant settings for the migration workspace.', 'Platform lead', 'Technical');
+    if (systems.some((x) => ['mssql', 'synapse', 'azure_sql'].indexOf(x.sys.platform) >= 0 && x.pattern.id === 'migrate_wh')) add('R-COPILOT', 'Migration Assistant AI fixes need Copilot', 'The AI-assisted fix step requires Copilot to be enabled in the tenant.', 2, 2, 'Enable Copilot in the tenant settings for the migration workspace.', 'Platform lead', 'Technical');
     if (c.gv('sec_pii') === 'extensive' && c.gv('bi_embed') === 'yes') add('R-PII', 'Sensitive data in externally shared analytics', 'Personal data plus external sharing increases exposure.', 3, 4, 'Sensitivity labels, DLP policies and RLS tested before external release.', 'Security lead', 'Compliance');
     return out.sort((a, b) => b.score - a.score);
   }

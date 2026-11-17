@@ -272,7 +272,7 @@
   function renderNav() {
     const nav = document.getElementById('nav'); if (!nav) return;
     const capture = ['org', 'systems', 'etl', 'bi', 'sec', 'ops', 'tgt'];
-    let h = '<div class="brand"><b>Fabric Migration Assessment Accelerator</b><span>SQL Server · Oracle · Teradata · Db2 · SAP → Microsoft Fabric</span></div>';
+    let h = '<div class="brand"><b>Fabric Migration Assessment Accelerator</b><span>28 platforms: warehouses, databases, SAP, Snowflake, Databricks, Hadoop and any SQL source → Microsoft Fabric</span></div>';
     NAV.forEach((grp) => {
       h += '<div class="nav-g">' + (grp.g ? '<h4>' + esc(grp.g) + '</h4>' : '');
       grp.items.forEach(([id, label]) => {
