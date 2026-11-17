@@ -19,7 +19,7 @@ The accelerator drafts most of the assessment automatically. Every question acce
 | **3 · Results** | Complexity, migration pattern per system, target architecture, F-SKU sizing and run cost, effort and team, roadmap, risks and assumptions. |
 | **4 · Validate & share** | Checklist of decisions and estimated inputs for a person to confirm, adjust or reject. Sign-off. Exports: report (.html), workbook (.xlsx), assessment file (.json), CSVs, scripts (.zip). |
 
-The completion meter separates the work done by the accelerator from the work validated by people. With discovery imported for most systems, the accelerator typically covers 70–80% and a reviewer closes the rest.
+The completion meter separates the work done by the accelerator from the work validated by people. A new assessment starts at 0%: a question only counts once it has an answer, a discovery result, an AI extraction or an explicit *Not sure* (which accepts the accelerator's benchmark estimate for a reviewer to check). With discovery imported for most systems, the accelerator typically covers 70–80% and a reviewer closes the rest.
 
 ---
 

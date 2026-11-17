@@ -108,7 +108,7 @@
   ];
   const SEC_TITLES = { sys: 'Profile & scope', inventory: 'Inventory & size', code: 'Code & proprietary features', workload: 'Workload', etl: 'Integration', bi: 'Consumption' };
 
-  function sysConf(sys) { const items = APP.R.items.filter((it) => it.scope === sys.id); const W = U.sum(items.map((x) => x.w)); return W ? U.sum(items.map((x) => x.w * x.r.conf)) / W : 0; }
+  function sysConf(sys) { const items = APP.R.items.filter((it) => it.scope === sys.id); const W = U.sum(items.map((x) => x.w)); return W ? U.sum(items.map((x) => x.w * x.r.cc)) / W : 0; }
   APP.sysConf = sysConf;
 
   APP.views.systems = () => {

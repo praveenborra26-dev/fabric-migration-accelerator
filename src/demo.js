@@ -37,6 +37,9 @@
       st.validations['d:inventory'] = { status: 'confirmed', by: 'Assessment lead', at: new Date().toISOString(), note: 'Five systems confirmed in the kickoff workshop.' };
       st.validations['d:drivers'] = { status: 'confirmed', by: 'Client sponsor', at: new Date().toISOString(), note: 'Teradata renewal in June 2028 is the hard date.' };
       st.validations['d:disc:' + td.id] = { status: 'confirmed', by: 'Teradata DBA', at: new Date().toISOString(), note: 'Totals match Viewpoint.' };
+      // the demo team went through every question: anything they could not answer is marked Not sure
+      E.GF && Object.keys(E.GF).forEach((id) => { if (!st.g[id]) st.g[id] = { ns: true }; });
+      st.systems.forEach((sys) => E.fieldsForSystem(sys).forEach((f) => { if (!sys.a[f.id]) sys.a[f.id] = { ns: true }; }));
       void ecc; void bw;
       return st;
     },

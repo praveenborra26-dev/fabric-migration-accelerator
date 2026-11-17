@@ -258,7 +258,7 @@
 
   function sectionConf(sec) {
     const items = APP.R.items.filter((it) => (sec === 'systems' ? it.scope !== 'g' : it.scope === 'g' && it.field.sec === sec));
-    const W = U.sum(items.map((x) => x.w)); return W ? U.sum(items.map((x) => x.w * x.r.conf)) / W : 0;
+    const W = U.sum(items.map((x) => x.w)); return W ? U.sum(items.map((x) => x.w * x.r.cc)) / W : 0;
   }
   APP.sectionConf = sectionConf;
   function pendingCount() {

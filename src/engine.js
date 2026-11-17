@@ -40,7 +40,7 @@
 
   /* ---------- answer resolution with inference ---------- */
   const D = (v, why) => ({ v, src: 'default', why });
-  const R = (v, why, deps) => ({ v, src: (deps || []).every((d) => d && d.conf >= 0.8) ? 'derived' : 'default', why });
+  const R = (v, why, deps) => ({ v, src: deps && deps.length && deps.every((d) => d && d.conf >= 0.8) ? 'derived' : 'default', why });
 
   function knownRaw(ans) { return ans && !ans.ns && has(ans.v); }
 
@@ -76,6 +76,9 @@
       else r = { v: inf.v, src: inf.src, conf: KB.CONF[inf.src], why: inf.why };
       r.notSure = !!(ans && ans.ns);
     }
+    // Completion credit: a benchmark default counts only once someone has looked at the
+    // question (answered "Not sure"); an untouched question has had no assessment work yet.
+    r.cc = r.src === 'default' && !r.notSure ? 0 : r.conf;
     ctx.cache[key] = r;
     return r;
   }
@@ -199,9 +202,9 @@
     ops_skill_pbi: (c) => D((c.gv('bi_tools') || []).indexOf('pbi') >= 0 ? 'medium' : 'low', 'From BI tools'),
     ops_team_fte: (c) => D(KB.SIZE_BASE.teamFte[c.size()], 'Benchmark for organization size'),
     ops_delivery: () => D('hybrid', 'Benchmark default'),
-    tgt_strategy: () => R('recommend', 'The accelerator recommends; approve it in Validate', [{ conf: 1 }]),
-    tgt_compute: () => R('recommend', 'The accelerator recommends per system; approve it in Validate', [{ conf: 1 }]),
-    tgt_cutover: () => R('recommend', 'The accelerator recommends; approve it in Validate', [{ conf: 1 }]),
+    tgt_strategy: (c) => R('recommend', 'The accelerator recommends; approve it in Validate', [{ conf: c.systems.length ? 1 : 0 }]),
+    tgt_compute: (c) => R('recommend', 'The accelerator recommends per system; approve it in Validate', [{ conf: c.systems.length ? 1 : 0 }]),
+    tgt_cutover: (c) => R('recommend', 'The accelerator recommends; approve it in Validate', [{ conf: c.systems.length ? 1 : 0 }]),
     tgt_parallel_weeks: (c) => D(['fs', 'ins', 'hls', 'public'].indexOf(c.gv('org_industry')) >= 0 ? 8 : 6, 'Benchmark for industry'),
     tgt_purchase: () => R('recommend', 'Reserved for production, pay-as-you-go for dev/test', [{ conf: 1 }]),
     tgt_rationalize: () => D('yes', 'Recommended practice'),
@@ -1221,7 +1224,7 @@
         if (a.secs.indexOf('*') >= 0 || a.secs.indexOf(sec) >= 0 || (a.id === 'A1' && it.scope !== 'g' && sec === 'inventory')) actInputs[a.id].push(it);
       });
     });
-    const confOf = (arr) => { const W = sum(arr.map((x) => x.w)); return W ? sum(arr.map((x) => x.w * x.r.conf)) / W : 0.5; };
+    const confOf = (arr) => { const W = sum(arr.map((x) => x.w)); return W ? sum(arr.map((x) => x.w * x.r.cc)) / W : 0; };
     const nSys = systems.length || 1;
     const jobs = c.gv('etl_jobs') || 0; const reps = c.gv('bi_reports') || 0;
     const allInputs = items;
@@ -1313,7 +1316,7 @@
     const out = [];
     const gainFor = (pred, newConf) => {
       const W = sum(items.map((x) => x.w)); if (!W) return 0;
-      const after = sum(items.map((x) => x.w * (pred(x) ? Math.max(x.r.conf, newConf) : x.r.conf))) / W;
+      const after = sum(items.map((x) => x.w * (pred(x) ? Math.max(x.r.cc, newConf) : x.r.cc))) / W;
       return Math.max(0, (after - comp.inputConf) * 0.83);
     };
     systems.forEach((x) => {
